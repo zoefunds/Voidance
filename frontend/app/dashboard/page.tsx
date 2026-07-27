@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useAccount } from "wagmi";
 import { api } from "@/lib/api";
 import { StatusChip } from "@/components/StatusChip";
+import { WalletIcon } from "@/components/Icons";
 
 export default function DashboardPage() {
   const { address, isConnected } = useAccount();
@@ -16,11 +17,16 @@ export default function DashboardPage() {
 
   if (!isConnected) {
     return (
-      <div className="max-w-xl mx-auto px-6 py-24 text-center">
-        <h1 className="font-display text-headline-xs text-trust-blue mb-2">Connect your wallet</h1>
-        <p className="text-body-sm text-on-surface-variant">
-          Connect a wallet to see the policies you sponsor or research, and to manage claims.
-        </p>
+      <div className="max-w-md mx-auto px-6 py-24">
+        <div className="bg-white border border-outline-variant rounded-xl p-8 ambient-card text-center">
+          <div className="w-12 h-12 rounded-full bg-research-teal/15 text-research-teal flex items-center justify-center mx-auto mb-4">
+            <WalletIcon width={22} height={22} />
+          </div>
+          <h1 className="font-display text-headline-xs text-trust-blue mb-2">Connect your wallet</h1>
+          <p className="text-body-sm text-on-surface-variant">
+            Connect a wallet to see the policies you sponsor or research, and to manage claims.
+          </p>
+        </div>
       </div>
     );
   }
@@ -54,7 +60,11 @@ function PolicyTable({
   emptyLabel: string;
 }) {
   if (policies.length === 0) {
-    return <p className="text-body-sm text-on-surface-variant">{emptyLabel}</p>;
+    return (
+      <div className="bg-innovation-slate border border-outline-variant border-dashed rounded-xl p-6 text-body-sm text-on-surface-variant">
+        {emptyLabel}
+      </div>
+    );
   }
   return (
     <div className="bg-white border border-outline-variant rounded-xl overflow-hidden">

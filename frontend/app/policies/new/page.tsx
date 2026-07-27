@@ -3,12 +3,13 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { parseEther } from "viem";
-import { useWriteContract } from "wagmi";
-import { VOIDANCE_ABI, VOIDANCE_ADDRESS } from "@/lib/contract";
+import { useVoidanceWallet } from "@/lib/genlayerWallet";
 
 export default function NewPolicyPage() {
   const router = useRouter();
-  const { writeContractAsync, isPending } = useWriteContract();
+  const { write } = useVoidanceWallet();
+  const [isPending, setIsPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     title: "",
@@ -30,28 +31,33 @@ export default function NewPolicyPage() {
     e.preventDefault();
     const nowTs = Math.floor(Date.now() / 1000);
     const deadlineTs = Math.floor(new Date(form.deadline).getTime() / 1000);
-    const txHash = await writeContractAsync({
-      address: VOIDANCE_ADDRESS,
-      abi: VOIDANCE_ABI,
-      functionName: "create_policy",
-      args: [
-        form.title,
-        form.description,
-        form.field,
-        form.methodologyUrl,
-        form.methodologySummary,
-        form.milestone,
-        "[]",
-        BigInt(deadlineTs),
-        BigInt(nowTs),
-        BigInt(form.premiumBps),
-        0n,
-        0n,
-      ],
-      value: parseEther(form.coverage || "0"),
-    });
-    router.push("/policies");
-    return txHash;
+    setError(null);
+    setIsPending(true);
+    try {
+      await write(
+        "create_policy",
+        [
+          form.title,
+          form.description,
+          form.field,
+          form.methodologyUrl,
+          form.methodologySummary,
+          form.milestone,
+          "[]",
+          deadlineTs,
+          nowTs,
+          Number(form.premiumBps),
+          0,
+          0,
+        ],
+        parseEther(form.coverage || "0")
+      );
+      router.push("/policies");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "transaction failed");
+    } finally {
+      setIsPending(false);
+    }
   }
 
   return (
@@ -94,6 +100,7 @@ export default function NewPolicyPage() {
             <input required type="number" value={form.premiumBps} onChange={(e) => set("premiumBps", e.target.value)} className="input" />
           </Field>
         </div>
+        {error && <p className="text-body-sm text-error-crimson">{error}</p>}
         <button type="submit" disabled={isPending} className="mt-2 px-5 py-2.5 bg-trust-blue text-white text-title-sm rounded-lg disabled:opacity-50">
           {isPending ? "Confirming in wallet…" : "Fund Policy"}
         </button>

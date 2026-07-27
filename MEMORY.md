@@ -114,6 +114,52 @@ Renamed to https://github.com/zoefunds/Voidance.git (was Innovation-Failure).
   min_coverage_wei=0, min_premium_bps=300, protocol_fee_bps=150,
   owner_address=blank → owner is the deploying wallet).
 
+## Automated tests (2026-07-27)
+
+Three real suites now exist and all pass — none are stubs:
+
+- **`tests/contract/test_voidance.py`** (15 tests, `genlayer-test` Direct
+  Mode — runs the actual contract in-memory against the real pinned GenVM
+  SDK, `mock_web`/`mock_llm` standing in for nondet calls). Covers the full
+  escrow lifecycle: coverage locking, exact-premium enforcement, all 4
+  payout paths (settle PASS/PARTIAL/FAIL, sponsor timeout, no-claim
+  timeout, cancellation), and admin controls — with real balance
+  assertions after each settlement, not just status-string checks.
+  Run: `pip install genlayer-test && pytest tests/contract -v` (needs
+  Python 3.12/3.13 — see the sub-bullet below on a 3.14 red herring, and
+  the "stray genlayer/ directory" bug this session hit and fixed).
+  **CRITICAL FOOTGUN, already fixed once, do not reintroduce**: never create
+  a directory literally named `genlayer` anywhere under this repo root.
+  Python's implicit namespace-package resolution will silently shadow the
+  real GenVM SDK package with an empty stub the moment pytest (or anything
+  else) runs with the repo root on `sys.path`, producing a baffling
+  `NameError: name 'allow_storage' is not defined` deep inside gltest's
+  loader that has nothing to do with your code. This exact bug cost real
+  session time before being traced to an empty `genlayer/` folder created
+  by an early `mkdir -p {...,genlayer,...}` scaffolding command (the
+  original README's suggested top-level folder list included `genlayer/`
+  — don't take that literally as a directory name; the contract already
+  lives in `contracts/`).
+  - Initially suspected (WRONG, ruled out by testing in a clean Python 3.13
+    venv with the same result): Python 3.14 incompatibility, pip stub
+    package (`pip install genlayer` installs an intentionally-empty
+    placeholder — uninstall it if present, but it wasn't the real cause
+    either).
+- **`backend/tests/api.test.ts`** (11 tests, Node's built-in test runner +
+  supertest, against a real throwaway Postgres container — not mocked).
+  Required extracting `backend/src/app.ts` (Express app factory) out of
+  `index.ts` (bootstrap: listen + sync loop + signal handlers) purely for
+  testability — `index.ts` now just wires `createApp()` up to a port.
+  Run: `docker run -d --name voidance-pg-test -e POSTGRES_USER=voidance -e
+  POSTGRES_PASSWORD=voidance -e POSTGRES_DB=voidance_test -p 5442:5432
+  postgres:16-alpine`, then `npm test` from `backend/`.
+- **Frontend**: no separate unit-test suite — instead verified via live
+  browser checks (Claude_Browser tools) against the actual Vercel
+  production deployment for every page, plus `tsc --noEmit` + `next build`
+  gating every deploy. Judged sufficient given the app is thin (mostly data
+  display + wallet-signed writes) and the real integration points (backend
+  API, GenLayer contract) are what matter, both of which ARE covered.
+
 ## Build/install verification (2026-07-27)
 
 All package versions originally written into `package.json` files were
@@ -148,25 +194,28 @@ writing code:
   weren't worth the risk under this session's time budget. Revisit only
   with a deliberate upgrade pass, not incidentally.
 
-## Known integration risk — verify before shipping writes
+## RESOLVED — frontend write path now uses genlayer-js, not a guessed ABI
 
-`frontend/lib/contract.ts` defines a standard EVM ABI and `frontend/app/policies/[id]/page.tsx`
-calls it via wagmi's `useWriteContract` (MetaMask/RainbowKit signs directly).
-This assumes GenLayer StudioNet exposes an EVM-JSON-RPC-compatible path for
-calling `@gl.public.write` functions with plain ABI-encoded calldata. The
-backend instead uses `genlayer-js`'s own `client.writeContract` /
-`createAccount` pattern (confirmed against the real genlayer-js README, see
-below), which is GenLayer's native, confirmed-correct way to sign and submit
-a transaction. **Before wiring the "Accept Policy" / "Submit Claim" /
-"Evaluate Claim" buttons for real, verify with a live StudioNet transaction
-whether wagmi's direct ABI call path actually works against a GenLayer IC.**
-If it doesn't, replace the wagmi `useWriteContract` calls in
-`app/policies/[id]/page.tsx` with `genlayer-js`'s `client.writeContract`,
-using the connected wallet's EIP-1193 provider (`window.ethereum` from
-wagmi's `useConnectorClient`) as the signing account instead of
-`createAccount()` (which is for raw-private-key accounts, not browser
-wallets) — genlayer-js is built on viem, so a viem `Account`/`WalletClient`
-adapter from the injected provider should be accepted directly.
+Originally the frontend called write functions via wagmi's `useWriteContract`
+against a hand-written EVM ABI — an unverified guess about StudioNet's
+transaction format. Fixed properly (2026-07-27) instead of testing-and-hoping:
+inspected genlayer-js 1.2.0's actual shipped type definitions
+(`node_modules/genlayer-js/dist/index.d.ts`) and confirmed `createClient`
+takes `{ chain, account: Address, provider: EthereumProvider }` — i.e. it
+natively supports signing through any EIP-1193 provider, which is exactly
+what a connected browser wallet exposes. `frontend/lib/genlayerWallet.ts`
+(`useVoidanceWallet` hook) gets that raw provider via wagmi's own documented
+`connector.getProvider()`, builds a `genlayer-js` client from it per write
+call, and calls `client.writeContract(...)` — genlayer-js's own transaction
+encoding, not a generic ABI guess. All three write pages
+(`app/policies/new`, `app/policies/[id]`, `app/policies/[id]/claim`) were
+rewired to this hook; `frontend/lib/contract.ts`'s dead ABI export was
+deleted. Typechecked and built clean end to end.
+
+Residual (unavoidable without live funds): still not tested against a real
+signed StudioNet transaction, since that requires the user's own funded
+wallet — but the implementation now matches genlayer-js's actual documented
+API rather than an assumption, which is the correct fix regardless.
 
 Confirmed real `genlayer-js` API (fetched from the actual GitHub README,
 package `genlayer-js`, chains export includes `localnet`/`studionet`):

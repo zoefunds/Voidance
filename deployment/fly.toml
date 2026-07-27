@@ -30,6 +30,10 @@ primary_region = "iad"
   NODE_ENV = "production"
   LOG_LEVEL = "info"
   SYNC_INTERVAL_MS = "15000"
+  # CORS_ORIGINS is set as a Fly secret, not here, because the real deployed
+  # Vercel URL (voidance-delta.vercel.app) wasn't known until after the
+  # first frontend deploy. Keep it in sync with `vercel ls` output:
+  #   fly secrets set CORS_ORIGINS="http://localhost:3000,https://voidance-delta.vercel.app" --app voidance-backend
 
 [http_service]
   internal_port = 4000

@@ -2,18 +2,20 @@
 
 import { use, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useWriteContract } from "wagmi";
-import { VOIDANCE_ABI, VOIDANCE_ADDRESS } from "@/lib/contract";
+import { useVoidanceWallet } from "@/lib/genlayerWallet";
+import { UploadCloudIcon, DocumentIcon } from "@/components/Icons";
 
 export default function SubmitClaimPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const policyId = Number(id);
   const router = useRouter();
-  const { writeContractAsync, isPending } = useWriteContract();
+  const { write } = useVoidanceWallet();
 
   const [narrative, setNarrative] = useState("");
   const [evidenceUrls, setEvidenceUrls] = useState(["", ""]);
   const [step, setStep] = useState(1);
+  const [isPending, setIsPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   function updateUrl(i: number, value: string) {
     setEvidenceUrls((prev) => prev.map((u, idx) => (idx === i ? value : u)));
@@ -21,13 +23,16 @@ export default function SubmitClaimPage({ params }: { params: Promise<{ id: stri
 
   async function handleSubmit() {
     const urls = evidenceUrls.map((u) => u.trim()).filter(Boolean);
-    await writeContractAsync({
-      address: VOIDANCE_ADDRESS,
-      abi: VOIDANCE_ABI,
-      functionName: "submit_claim",
-      args: [BigInt(policyId), narrative, JSON.stringify(urls), BigInt(Math.floor(Date.now() / 1000))],
-    });
-    router.push(`/policies/${policyId}`);
+    setError(null);
+    setIsPending(true);
+    try {
+      await write("submit_claim", [policyId, narrative, JSON.stringify(urls), Math.floor(Date.now() / 1000)]);
+      router.push(`/policies/${policyId}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "transaction failed");
+    } finally {
+      setIsPending(false);
+    }
   }
 
   return (
@@ -53,9 +58,15 @@ export default function SubmitClaimPage({ params }: { params: Promise<{ id: stri
         ))}
       </div>
 
+      {error && <p className="text-body-sm text-error-crimson mb-4">{error}</p>}
+
       <div className="bg-white border border-outline-variant rounded-xl p-6 ambient-card">
         {step === 1 && (
           <div>
+            <div className="flex items-center gap-2 mb-3">
+              <DocumentIcon width={18} height={18} className="text-research-teal" />
+              <span className="text-title-sm text-trust-blue">Point of Failure</span>
+            </div>
             <label className="block text-label-xs text-on-surface-variant mb-1.5">
               What happened — the point of failure
             </label>
@@ -79,8 +90,12 @@ export default function SubmitClaimPage({ params }: { params: Promise<{ id: stri
 
         {step === 2 && (
           <div>
+            <div className="flex items-center gap-2 mb-3">
+              <UploadCloudIcon width={18} height={18} className="text-research-teal" />
+              <span className="text-title-sm text-trust-blue">Independent Evidence</span>
+            </div>
             <label className="block text-label-xs text-on-surface-variant mb-1.5">
-              Independent evidence URLs (datasets, repos, lab notebooks, third-party logs)
+              Evidence URLs (datasets, repos, lab notebooks, third-party logs)
             </label>
             <div className="flex flex-col gap-2 mb-3">
               {evidenceUrls.map((u, i) => (

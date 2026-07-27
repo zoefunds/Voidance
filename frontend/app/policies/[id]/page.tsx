@@ -1,11 +1,11 @@
 "use client";
 
 import useSWR from "swr";
-import { use } from "react";
-import { useAccount, useWriteContract } from "wagmi";
+import { use, useState } from "react";
 import { api } from "@/lib/api";
 import { StatusChip } from "@/components/StatusChip";
-import { VOIDANCE_ABI, VOIDANCE_ADDRESS } from "@/lib/contract";
+import { useVoidanceWallet } from "@/lib/genlayerWallet";
+import { LinkIcon } from "@/components/Icons";
 
 function formatGen(wei: string) {
   return (Number(wei) / 1e18).toLocaleString(undefined, { maximumFractionDigits: 4 });
@@ -14,9 +14,10 @@ function formatGen(wei: string) {
 export default function PolicyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const policyId = Number(id);
-  const { address } = useAccount();
+  const { address, write } = useVoidanceWallet();
   const { data: policy, mutate } = useSWR(`policy-${policyId}`, () => api.getPolicy(policyId));
-  const { writeContractAsync, isPending } = useWriteContract();
+  const [isPending, setIsPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   if (!policy) return <div className="max-w-4xl mx-auto px-6 py-16 text-body-sm">Loading policy…</div>;
 
@@ -24,26 +25,26 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
   const isSponsor = address?.toLowerCase() === policy.sponsor?.toLowerCase();
   const requiredPremium = (BigInt(policy.coverage_wei) * BigInt(policy.premium_bps)) / 10000n;
 
-  async function acceptPolicy() {
-    await writeContractAsync({
-      address: VOIDANCE_ADDRESS,
-      abi: VOIDANCE_ABI,
-      functionName: "accept_policy",
-      args: [BigInt(policyId), BigInt(Math.floor(Date.now() / 1000))],
-      value: requiredPremium,
-    });
-    mutate();
+  async function runWrite(fn: () => Promise<string>) {
+    setError(null);
+    setIsPending(true);
+    try {
+      await fn();
+      await mutate();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "transaction failed");
+    } finally {
+      setIsPending(false);
+    }
   }
 
-  async function evaluateClaim() {
-    await writeContractAsync({
-      address: VOIDANCE_ADDRESS,
-      abi: VOIDANCE_ABI,
-      functionName: "evaluate_claim",
-      args: [BigInt(policyId), BigInt(Math.floor(Date.now() / 1000))],
-    });
-    mutate();
-  }
+  const acceptPolicy = () =>
+    runWrite(() =>
+      write("accept_policy", [policyId, Math.floor(Date.now() / 1000)], requiredPremium)
+    );
+
+  const evaluateClaim = () =>
+    runWrite(() => write("evaluate_claim", [policyId, Math.floor(Date.now() / 1000)]));
 
   return (
     <div className="max-w-4xl mx-auto px-6 md:px-10 py-10">
@@ -66,8 +67,14 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
       <div className="bg-white border border-outline-variant rounded-xl p-5 ambient-card mb-6">
         <h2 className="text-title-sm text-trust-blue mb-2">Insured Milestone</h2>
         <p className="text-body-sm text-on-surface-variant mb-3">{policy.milestone_description}</p>
-        <a href={policy.methodology_url} target="_blank" rel="noreferrer" className="text-body-sm text-research-teal hover:underline">
-          View methodology document ↗
+        <a
+          href={policy.methodology_url}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1.5 text-body-sm text-research-teal hover:underline"
+        >
+          <LinkIcon width={14} height={14} />
+          View methodology document
         </a>
       </div>
 
@@ -79,6 +86,8 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
           <p className="text-body-sm text-on-surface-variant">{policy.evaluation_summary}</p>
         </div>
       )}
+
+      {error && <p className="text-body-sm text-error-crimson mb-4">{error}</p>}
 
       <div className="flex flex-wrap gap-3">
         {policy.status === "CREATED" && !isSponsor && (
