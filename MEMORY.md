@@ -232,6 +232,24 @@ await client.readContract({ address, functionName, args, stateStatus: "accepted"
 await client.writeContract({ account, address, functionName, args, value });
 ```
 
+## First real on-chain test — bug found and fixed (2026-07-27)
+
+User created a real policy through the live frontend (`/policies/new`) —
+**it worked**: policy #0 landed on-chain with real GEN, confirming the
+`genlayer-js` wallet-signing fix (see above) is genuinely correct, not just
+type-checked. Clicking into the policy detail page then crashed with
+"Application error: a client-side exception has occurred" — console showed
+minified React error #438 (`use()` called on something that isn't a
+Promise/Context). Root cause: `app/policies/[id]/page.tsx` and
+`app/policies/[id]/claim/page.tsx` used the **Next.js 15** pattern
+(`params: Promise<{id: string}>` + `const {id} = use(params)`), but this
+project runs **Next.js 14.2**, where `params` is a plain synchronous object
+— calling `use()` on it throws. Fixed by reverting both to the Next 14
+signature (`{ params }: { params: { id: string } }`, use `params.id`
+directly, no `use()` import). Verified fixed against the real policy #0 in
+a fresh browser tab post-deploy. **If any other dynamic route page is added
+later, use the Next 14 plain-object params pattern, not Next 15's.**
+
 ## Admin console + WalletConnect (2026-07-27)
 
 - `frontend/app/admin/page.tsx` — gated by `is_admin(address)` read via
