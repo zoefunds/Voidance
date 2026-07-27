@@ -1,13 +1,13 @@
 "use client";
 
-import { use, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useVoidanceWallet } from "@/lib/genlayerWallet";
 import { UploadCloudIcon, DocumentIcon } from "@/components/Icons";
 
-export default function SubmitClaimPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
-  const policyId = Number(id);
+// Next.js 14 App Router passes `params` as a plain object, not a Promise.
+export default function SubmitClaimPage({ params }: { params: { id: string } }) {
+  const policyId = Number(params.id);
   const router = useRouter();
   const { write } = useVoidanceWallet();
 

@@ -1,7 +1,7 @@
 "use client";
 
 import useSWR from "swr";
-import { use, useState } from "react";
+import { useState } from "react";
 import { api } from "@/lib/api";
 import { StatusChip } from "@/components/StatusChip";
 import { useVoidanceWallet } from "@/lib/genlayerWallet";
@@ -11,9 +11,10 @@ function formatGen(wei: string) {
   return (Number(wei) / 1e18).toLocaleString(undefined, { maximumFractionDigits: 4 });
 }
 
-export default function PolicyDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
-  const policyId = Number(id);
+// Next.js 14 App Router passes `params` as a plain object (not the Promise
+// Next.js 15 introduced) — no `use()` call needed/valid here.
+export default function PolicyDetailPage({ params }: { params: { id: string } }) {
+  const policyId = Number(params.id);
   const { address, write } = useVoidanceWallet();
   const { data: policy, mutate } = useSWR(`policy-${policyId}`, () => api.getPolicy(policyId));
   const [isPending, setIsPending] = useState(false);
