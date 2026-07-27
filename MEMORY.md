@@ -232,6 +232,26 @@ await client.readContract({ address, functionName, args, stateStatus: "accepted"
 await client.writeContract({ account, address, functionName, args, value });
 ```
 
+## Admin console + WalletConnect (2026-07-27)
+
+- `frontend/app/admin/page.tsx` — gated by `is_admin(address)` read via
+  `frontend/lib/genlayerRead.ts` (a plain unsigned `genlayer-js` read
+  client — views don't need a wallet). Shows platform stats, pause/unpause,
+  protocol fee update, fee sweep, and a full policy list. All actions route
+  through `useVoidanceWallet().write` (real signed transactions).
+- Real WalletConnect Cloud project ID (`91b9e60f61c44317e38ce4c5e348662b`)
+  set as `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` on Vercel, replacing the
+  `voidance-dev` placeholder — the user created the WalletConnect account
+  themselves (Claude cannot sign up for third-party accounts on the user's
+  behalf) and handed the ID over.
+- `docs/TESTING.md` — step-by-step end-to-end test script with exact
+  contract-call parameter values (real, always-reachable evidence URLs) for
+  manually walking a real policy through create → accept → claim →
+  evaluate → withdraw with real GEN on StudioNet. Not yet executed by
+  anyone — this remains the one true unverified path (see "Known
+  integration risk" section above, now partially addressed by the
+  genlayer-js wallet fix but still never tested against a live signed tx).
+
 ## Open follow-ups / next steps for future sessions
 
 - [x] Get deployed contract address from user; wire into backend config.
