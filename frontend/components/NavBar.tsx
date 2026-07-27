@@ -8,6 +8,7 @@ const LINKS = [
   { href: "/how-it-works", label: "How it Works" },
   { href: "/policies", label: "Browse Policies" },
   { href: "/dashboard", label: "Dashboard" },
+  { href: "/admin", label: "Admin" },
 ];
 
 export function NavBar() {
