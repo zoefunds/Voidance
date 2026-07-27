@@ -1,0 +1,28 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Innovation Failure Insurance logo">
+  <defs>
+    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0A2540"/>
+      <stop offset="100%" stop-color="#001527"/>
+    </linearGradient>
+    <linearGradient id="teal" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00D4FF"/>
+      <stop offset="100%" stop-color="#00A8CC"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Shield: institutional trust / insurance -->
+  <path d="M32 3 L56 12 V29 C56 45 46 55 32 61 C18 55 8 45 8 29 V12 Z"
+        fill="url(#shieldGrad)" stroke="#00D4FF" stroke-width="1.5"/>
+
+  <!-- Flask/beaker: research -->
+  <path d="M27 16 H37 V24 L45 42 C46.5 45.5 44 49 40 49 H24 C20 49 17.5 45.5 19 42 L27 24 Z"
+        fill="none" stroke="url(#teal)" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+  <line x1="25" y1="16" x2="39" y2="16" stroke="url(#teal)" stroke-width="2.4" stroke-linecap="round"/>
+
+  <!-- Liquid level -->
+  <path d="M22.5 38 L41.5 38 L40 42 C39 44 38 44.5 36.5 44.5 H27.5 C26 44.5 25 44 24 42 Z"
+        fill="#00D4FF" opacity="0.85"/>
+
+  <!-- Spark: innovation, sits over the shield notch -->
+  <path d="M45 8 L47 13 L52 15 L47 17 L45 22 L43 17 L38 15 L43 13 Z" fill="#00D4FF"/>
+</svg>

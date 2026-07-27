@@ -1,0 +1,55 @@
+# Voidance backend — Fly.io deployment config.
+#
+# "Must never die" requirements implemented here:
+#   - min_machines_running = 1 keeps at least one instance up at all times
+#     (no scale-to-zero, unlike Fly's default autostop behavior).
+#   - auto_stop_machines = "off" prevents Fly from suspending the machine
+#     during low traffic.
+#   - [[vm]] restarts on crash automatically (Fly's default supervisor
+#     behavior); [checks.health] gives Fly a real liveness signal so a
+#     wedged-but-still-running process gets recycled instead of serving
+#     errors forever.
+#
+# Deploy from the REPO ROOT so the Docker build context includes both
+# backend/ and database/:
+#   fly launch --config deployment/fly.toml --dockerfile backend/Dockerfile --no-deploy
+#   fly postgres create --name voidance-db
+#   fly postgres attach voidance-db --app voidance-backend
+#   fly secrets set GENLAYER_RPC_URL=... VOIDANCE_CONTRACT_ADDRESS=... CORS_ORIGINS=...
+#   fly deploy --config deployment/fly.toml
+
+app = "voidance-backend"
+primary_region = "iad"
+
+[build]
+  dockerfile = "../backend/Dockerfile"
+  context = ".."
+
+[env]
+  PORT = "4000"
+  NODE_ENV = "production"
+  LOG_LEVEL = "info"
+  SYNC_INTERVAL_MS = "15000"
+
+[http_service]
+  internal_port = 4000
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+  [[http_service.checks]]
+    grace_period = "20s"
+    interval = "15s"
+    method = "GET"
+    timeout = "5s"
+    path = "/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+
+[deploy]
+  release_command = "node dist/db/migrate.js"
+  strategy = "rolling"

@@ -1,0 +1,39 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  background-color: #f6f9fc;
+  color: #181c1e;
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(226, 232, 240, 1);
+}
+
+.ambient-card {
+  box-shadow: 0px 4px 20px rgba(10, 37, 64, 0.05);
+}
+
+.input {
+  width: 100%;
+  background: #ffffff;
+  border: 1px solid #c4c6ce;
+  border-radius: 0.5rem;
+  padding: 0.55rem 0.75rem;
+  font-size: 13px;
+  line-height: 20px;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.input:focus {
+  border-color: #00d4ff;
+  box-shadow: 0 0 0 2px rgba(0, 212, 255, 0.25);
+}
