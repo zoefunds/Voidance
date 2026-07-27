@@ -15,7 +15,9 @@
 #   fly launch --config deployment/fly.toml --dockerfile backend/Dockerfile --no-deploy
 #   fly postgres create --name voidance-db
 #   fly postgres attach voidance-db --app voidance-backend
-#   fly secrets set GENLAYER_RPC_URL=... VOIDANCE_CONTRACT_ADDRESS=... CORS_ORIGINS=... REDIS_URL=...
+#   fly secrets set GENLAYER_RPC_URL=... VOIDANCE_CONTRACT_ADDRESS=... CORS_ORIGINS=...
+# (No Redis: Postgres is the only external dependency, by design — see
+# MEMORY.md "Redis removed" note.)
 #   fly deploy --config deployment/fly.toml
 
 app = "voidance-backend"

@@ -90,18 +90,23 @@ Key properties, per the review team's rejection criteria:
   `genvm-lint check contracts/innovation_failure_insurance.py --json` before
   deploying if the tool becomes available, per the user's reference brief.
 
-## Redis (Upstash)
+## Redis — added, then removed by explicit request (2026-07-27)
 
-User supplied an Upstash Redis URL for the backend:
-`rediss://default:***@optimum-jaguar-161919.upstash.io:6379` (the actual
-secret is in the user's message history / Fly secrets — never hardcode it
-into a committed file; it's only referenced via `REDIS_URL` env var, wired
-into `backend/src/redis.ts`). Used for: (1) short-TTL response cache on
-`/api/policies` and `/api/stats` (8-10s), (2) `rate-limit-redis` store for
-`express-rate-limit` so limits survive restarts / multi-machine scale-out.
-It is optional infra — `redis.ts` degrades to direct-Postgres reads and an
-in-memory rate limiter if `REDIS_URL` is unset, so a Redis outage never
-takes the "never dies" backend down.
+User initially supplied an Upstash Redis URL, which was wired in for a
+short-TTL response cache on `/api/policies`/`/api/stats` and a
+`rate-limit-redis` store. User then asked to **cut Redis usage entirely to
+avoid outage risk** and reconfirmed the backend must never die. Since the
+original Redis wiring was already fail-open (degraded to direct Postgres /
+in-memory on any Redis error), removing it wasn't fixing a bug — it was
+honoring an explicit preference for a smaller dependency surface: Postgres
+is now the *only* external dependency the backend has, which is the
+simplest version of "never dies" achievable. Removed: `backend/src/redis.ts`
+(deleted), `cacheGet`/`cacheSet` calls in `routes/policies.ts`/`routes/stats.ts`
+(reverted to plain Postgres queries), the `RedisStore` rate-limit backing in
+`src/app.ts` (now a plain in-memory `express-rate-limit`, which resets on
+restart — an accepted trade), `ioredis`/`rate-limit-redis` deps, `REDIS_URL`
+from env schema/`.env.example`/Fly secrets. **Do not re-add Redis unless the
+user asks again.**
 
 ## Repo
 
