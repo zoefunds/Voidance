@@ -8,14 +8,15 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // the source tree, but the Docker image (see backend/Dockerfile) flattens
 // it to two levels above dist/db. Try both so `npm run migrate` works
 // identically in local dev and in the deployed container.
-const candidates = [
+const candidates: string[] = [
   path.resolve(__dirname, "../../../database/migrations"),
   path.resolve(__dirname, "../../database/migrations"),
 ];
-const migrationsDir = candidates.find(existsSync);
-if (!migrationsDir) {
+const found = candidates.find(existsSync);
+if (!found) {
   throw new Error(`could not locate database/migrations — tried: ${candidates.join(", ")}`);
 }
+const migrationsDir: string = found;
 
 async function migrate() {
   const files = readdirSync(migrationsDir).filter((f) => f.endsWith(".sql")).sort();

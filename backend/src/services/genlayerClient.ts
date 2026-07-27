@@ -14,11 +14,22 @@ export const genlayerClient = createClient({
 
 export const CONTRACT_ADDRESS = env.VOIDANCE_CONTRACT_ADDRESS as `0x${string}`;
 
-export async function readVoidance<T = unknown>(functionName: string, args: unknown[] = []): Promise<T> {
+// Mirrors genlayer-js's CalldataEncodable union — every read arg we pass
+// (policy ids, offsets, limits, status strings) fits comfortably in this.
+type CalldataArg =
+  | null
+  | boolean
+  | number
+  | bigint
+  | string
+  | Uint8Array
+  | Array<CalldataArg>
+  | { [key: string]: CalldataArg };
+
+export async function readVoidance<T = unknown>(functionName: string, args: CalldataArg[] = []): Promise<T> {
   return genlayerClient.readContract({
     address: CONTRACT_ADDRESS,
     functionName,
     args,
-    stateStatus: "accepted",
   }) as Promise<T>;
 }

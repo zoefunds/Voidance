@@ -6,6 +6,7 @@ const EnvSchema = z.object({
   PORT: z.coerce.number().default(4000),
   LOG_LEVEL: z.string().default("info"),
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
+  REDIS_URL: z.string().optional(),
   GENLAYER_RPC_URL: z.string().url(),
   GENLAYER_CHAIN_ID: z.coerce.number().default(61999),
   VOIDANCE_CONTRACT_ADDRESS: z

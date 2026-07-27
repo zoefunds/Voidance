@@ -2,10 +2,12 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
-import pinoHttp from "pino-http";
+import { RedisStore } from "rate-limit-redis";
+import { pinoHttp } from "pino-http";
 import { env } from "./config/env.js";
 import { logger } from "./logger.js";
 import { pool } from "./db/pool.js";
+import { redis } from "./redis.js";
 import { policiesRouter } from "./routes/policies.js";
 import { walletsRouter } from "./routes/wallets.js";
 import { statsRouter } from "./routes/stats.js";
@@ -22,12 +24,23 @@ app.use(
 );
 app.use(express.json({ limit: "256kb" }));
 app.use(pinoHttp({ logger }));
+// Redis-backed store when available so limits hold correctly across process
+// restarts and any future multi-machine scale-out; falls back to the
+// in-memory store (single-instance only) when REDIS_URL is unset.
+const redisClient = redis;
+const rateLimitStore = redisClient
+  ? new RedisStore({
+      sendCommand: (command: string, ...args: string[]) => redisClient.call(command, ...args) as Promise<any>,
+    })
+  : undefined;
+
 app.use(
   rateLimit({
     windowMs: 60_000,
     limit: 300,
     standardHeaders: true,
     legacyHeaders: false,
+    store: rateLimitStore,
   })
 );
 

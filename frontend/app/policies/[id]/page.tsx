@@ -29,7 +29,7 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
       address: VOIDANCE_ADDRESS,
       abi: VOIDANCE_ABI,
       functionName: "accept_policy",
-      args: [policyId, Math.floor(Date.now() / 1000)],
+      args: [BigInt(policyId), BigInt(Math.floor(Date.now() / 1000))],
       value: requiredPremium,
     });
     mutate();
@@ -40,7 +40,7 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
       address: VOIDANCE_ADDRESS,
       abi: VOIDANCE_ABI,
       functionName: "evaluate_claim",
-      args: [policyId, Math.floor(Date.now() / 1000)],
+      args: [BigInt(policyId), BigInt(Math.floor(Date.now() / 1000))],
     });
     mutate();
   }

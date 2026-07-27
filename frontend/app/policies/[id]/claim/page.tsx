@@ -25,7 +25,7 @@ export default function SubmitClaimPage({ params }: { params: Promise<{ id: stri
       address: VOIDANCE_ADDRESS,
       abi: VOIDANCE_ABI,
       functionName: "submit_claim",
-      args: [policyId, narrative, JSON.stringify(urls), Math.floor(Date.now() / 1000)],
+      args: [BigInt(policyId), narrative, JSON.stringify(urls), BigInt(Math.floor(Date.now() / 1000))],
     });
     router.push(`/policies/${policyId}`);
   }

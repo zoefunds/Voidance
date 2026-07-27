@@ -90,12 +90,63 @@ Key properties, per the review team's rejection criteria:
   `genvm-lint check contracts/innovation_failure_insurance.py --json` before
   deploying if the tool becomes available, per the user's reference brief.
 
+## Redis (Upstash)
+
+User supplied an Upstash Redis URL for the backend:
+`rediss://default:***@optimum-jaguar-161919.upstash.io:6379` (the actual
+secret is in the user's message history / Fly secrets — never hardcode it
+into a committed file; it's only referenced via `REDIS_URL` env var, wired
+into `backend/src/redis.ts`). Used for: (1) short-TTL response cache on
+`/api/policies` and `/api/stats` (8-10s), (2) `rate-limit-redis` store for
+`express-rate-limit` so limits survive restarts / multi-machine scale-out.
+It is optional infra — `redis.ts` degrades to direct-Postgres reads and an
+in-memory rate limiter if `REDIS_URL` is unset, so a Redis outage never
+takes the "never dies" backend down.
+
+## Repo
+
+Renamed to https://github.com/zoefunds/Voidance.git (was Innovation-Failure).
+
 ## Deployed contract
 
 - **Voidance contract address (GenLayer StudioNet)**: `0x58dED66906Ceb587236591C5d9729CE89501cbC2`
   (deployed by the user via GenLayer Studio, constructor args:
   min_coverage_wei=0, min_premium_bps=300, protocol_fee_bps=150,
   owner_address=blank → owner is the deploying wallet).
+
+## Build/install verification (2026-07-27)
+
+All package versions originally written into `package.json` files were
+guessed and several didn't exist on npm (`genlayer-js@0.7.4` in particular
+— real latest is `1.2.0`). Corrected every dependency to versions confirmed
+to exist via `npm view`, then actually ran installs/builds instead of just
+writing code:
+- **Backend**: `npm install` ✅, `tsc --noEmit` ✅ (fixed real type errors:
+  `pino-http` needs the named import `{ pinoHttp }`, `ioredis` needs
+  `{ Redis }` named import under NodeNext resolution, `genlayer-js`
+  `readContract` doesn't accept a `stateStatus` option in v1.2.0's types,
+  `rate-limit-redis`'s `sendCommand` needs a locally-captured non-null
+  redis binding to narrow properly inside the closure), `npm run build` ✅.
+  **Ran the compiled server against a throwaway local Postgres container**
+  (migration applied cleanly) and hit `/health`, `/api/policies`,
+  `/api/stats` — `/api/stats` successfully read `get_platform_stats` live
+  from the real deployed contract at `0x58dED66906Ceb587236591C5d9729CE89501cbC2`
+  on StudioNet via `genlayer-js`, confirming the read path is real and
+  working, not just type-checked.
+- **Frontend**: `npm install` ✅, `tsc --noEmit` ✅ (fixed real type errors:
+  wagmi's ABI `uint256` args need `bigint`, not `number` — every
+  `writeContractAsync` call site now wraps ids/timestamps in `BigInt(...)`),
+  `next build` ✅ after adding webpack aliases in `next.config.mjs` to stub
+  out `@x402/*` modules pulled in transitively by RainbowKit's Coinbase
+  "Base Account" connector (optional, unused, would otherwise fail the
+  build) and `@react-native-async-storage/async-storage` / `pino-pretty`
+  (optional deps of WalletConnect/pino, browser-irrelevant).
+- Used `next@14`/`react@18`/`wagmi@2`/`tailwindcss@3` majors deliberately,
+  not the newest available (`next@16`/`react@19`/`wagmi@3`/`tailwindcss@4`)
+  — those are recent major bumps with breaking API/config changes (Tailwind
+  4 in particular drops the JS config file format this project uses) that
+  weren't worth the risk under this session's time budget. Revisit only
+  with a deliberate upgrade pass, not incidentally.
 
 ## Known integration risk — verify before shipping writes
 

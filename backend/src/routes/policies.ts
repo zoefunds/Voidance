@@ -1,7 +1,10 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
+import { cacheGet, cacheSet } from "../redis.js";
 
 export const policiesRouter = Router();
+
+const LIST_CACHE_TTL_SECONDS = 8;
 
 function mapPolicyRow(row: any) {
   return {
@@ -37,6 +40,10 @@ policiesRouter.get("/", async (req, res, next) => {
     const offset = Math.max(0, Number(req.query.offset ?? 0));
     const limit = Math.min(50, Math.max(1, Number(req.query.limit ?? 20)));
     const status = typeof req.query.status === "string" ? req.query.status.toUpperCase() : null;
+    const cacheKey = `policies:list:${status ?? "ALL"}:${offset}:${limit}`;
+
+    const cached = await cacheGet<ReturnType<typeof mapPolicyRow>[]>(cacheKey);
+    if (cached) return res.json(cached);
 
     const { rows } = status
       ? await pool.query(
@@ -45,7 +52,9 @@ policiesRouter.get("/", async (req, res, next) => {
         )
       : await pool.query("SELECT * FROM policies ORDER BY id DESC OFFSET $1 LIMIT $2", [offset, limit]);
 
-    res.json(rows.map(mapPolicyRow));
+    const mapped = rows.map(mapPolicyRow);
+    await cacheSet(cacheKey, mapped, LIST_CACHE_TTL_SECONDS);
+    res.json(mapped);
   } catch (err) {
     next(err);
   }
