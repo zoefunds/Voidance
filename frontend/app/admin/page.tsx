@@ -15,6 +15,9 @@ interface Config {
   paused: boolean;
   protocol_fee_bps: number;
   min_premium_bps: number;
+  min_coverage_wei: number;
+  default_accept_window_seconds: number;
+  default_claim_grace_seconds: number;
 }
 
 function formatGen(wei: string | number) {
@@ -30,6 +33,12 @@ export default function AdminPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [feeInput, setFeeInput] = useState("");
+  const [minPremiumInput, setMinPremiumInput] = useState("");
+  const [minCoverageInput, setMinCoverageInput] = useState("");
+  const [acceptWindowInput, setAcceptWindowInput] = useState("");
+  const [claimGraceInput, setClaimGraceInput] = useState("");
+  const [adminAddrInput, setAdminAddrInput] = useState("");
+  const [newOwnerInput, setNewOwnerInput] = useState("");
 
   const { data: stats, mutate: mutateStats } = useSWR("admin-stats", () => api.getPlatformStats());
   const { data: policies } = useSWR("admin-policies", () => api.listPolicies(0, 50));
@@ -51,6 +60,10 @@ export default function AdminPage() {
           setIsAdmin(adminFlag);
           setConfig(cfg);
           setFeeInput(String(cfg.protocol_fee_bps));
+          setMinPremiumInput(String(cfg.min_premium_bps));
+          setMinCoverageInput(String(cfg.min_coverage_wei));
+          setAcceptWindowInput(String(cfg.default_accept_window_seconds));
+          setClaimGraceInput(String(cfg.default_claim_grace_seconds));
         }
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "failed to load admin state");
@@ -195,6 +208,140 @@ export default function AdminPage() {
         >
           {busy === "sweep_protocol_fees" ? "Sweeping…" : "Sweep Fees to Owner Balance"}
         </button>
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-5 mb-8">
+        <div className="bg-white border border-outline-variant rounded-xl p-5 ambient-card">
+          <h2 className="text-title-sm text-trust-blue mb-3">Policy Minimums</h2>
+          <label className="text-label-xs text-on-surface-variant uppercase block mb-1">Min Premium (bps)</label>
+          <div className="flex gap-2 mb-3">
+            <input
+              value={minPremiumInput}
+              onChange={(e) => setMinPremiumInput(e.target.value)}
+              type="number"
+              className="input"
+            />
+            <button
+              disabled={busy !== null}
+              onClick={() =>
+                runAction("set_min_premium_bps", () =>
+                  write("set_min_premium_bps", [Number(minPremiumInput)])
+                )
+              }
+              className="px-4 py-2 bg-trust-blue text-white text-title-sm rounded-lg disabled:opacity-50 whitespace-nowrap"
+            >
+              {busy === "set_min_premium_bps" ? "Saving…" : "Update"}
+            </button>
+          </div>
+          <label className="text-label-xs text-on-surface-variant uppercase block mb-1">Min Coverage (wei)</label>
+          <div className="flex gap-2">
+            <input
+              value={minCoverageInput}
+              onChange={(e) => setMinCoverageInput(e.target.value)}
+              type="text"
+              className="input"
+            />
+            <button
+              disabled={busy !== null}
+              onClick={() =>
+                runAction("set_min_coverage_wei", () =>
+                  write("set_min_coverage_wei", [minCoverageInput])
+                )
+              }
+              className="px-4 py-2 bg-trust-blue text-white text-title-sm rounded-lg disabled:opacity-50 whitespace-nowrap"
+            >
+              {busy === "set_min_coverage_wei" ? "Saving…" : "Update"}
+            </button>
+          </div>
+        </div>
+
+        <div className="bg-white border border-outline-variant rounded-xl p-5 ambient-card">
+          <h2 className="text-title-sm text-trust-blue mb-3">Default Windows (seconds)</h2>
+          <label className="text-label-xs text-on-surface-variant uppercase block mb-1">Accept Window</label>
+          <input
+            value={acceptWindowInput}
+            onChange={(e) => setAcceptWindowInput(e.target.value)}
+            type="number"
+            className="input mb-3"
+          />
+          <label className="text-label-xs text-on-surface-variant uppercase block mb-1">Claim Grace</label>
+          <input
+            value={claimGraceInput}
+            onChange={(e) => setClaimGraceInput(e.target.value)}
+            type="number"
+            className="input mb-3"
+          />
+          <button
+            disabled={busy !== null}
+            onClick={() =>
+              runAction("set_default_windows", () =>
+                write("set_default_windows", [Number(acceptWindowInput), Number(claimGraceInput)])
+              )
+            }
+            className="px-4 py-2 bg-trust-blue text-white text-title-sm rounded-lg disabled:opacity-50"
+          >
+            {busy === "set_default_windows" ? "Saving…" : "Update Windows"}
+          </button>
+        </div>
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-5 mb-8">
+        <div className="bg-white border border-outline-variant rounded-xl p-5 ambient-card">
+          <h2 className="text-title-sm text-trust-blue mb-3">Admin Roster</h2>
+          <p className="text-body-sm text-on-surface-variant mb-3">
+            Add or remove addresses allowed to pause/unpause and manage config. Only the owner can call this.
+          </p>
+          <div className="flex gap-2">
+            <input
+              value={adminAddrInput}
+              onChange={(e) => setAdminAddrInput(e.target.value)}
+              type="text"
+              placeholder="0x…"
+              className="input"
+            />
+            <button
+              disabled={busy !== null || !adminAddrInput}
+              onClick={() => runAction("add_admin", () => write("add_admin", [adminAddrInput]))}
+              className="px-4 py-2 bg-research-teal text-trust-blue text-title-sm rounded-lg disabled:opacity-50 whitespace-nowrap"
+            >
+              {busy === "add_admin" ? "Adding…" : "Add"}
+            </button>
+            <button
+              disabled={busy !== null || !adminAddrInput}
+              onClick={() => runAction("remove_admin", () => write("remove_admin", [adminAddrInput]))}
+              className="px-4 py-2 bg-white border border-error-crimson text-error-crimson text-title-sm rounded-lg disabled:opacity-50 whitespace-nowrap"
+            >
+              {busy === "remove_admin" ? "Removing…" : "Remove"}
+            </button>
+          </div>
+        </div>
+
+        <div className="bg-white border border-outline-variant rounded-xl p-5 ambient-card">
+          <h2 className="text-title-sm text-trust-blue mb-3">Transfer Ownership</h2>
+          <p className="text-body-sm text-on-surface-variant mb-3">
+            Current owner: <strong className="text-trust-blue">{config?.owner}</strong>. This is irreversible —
+            the new owner gains full control including future ownership transfer.
+          </p>
+          <div className="flex gap-2">
+            <input
+              value={newOwnerInput}
+              onChange={(e) => setNewOwnerInput(e.target.value)}
+              type="text"
+              placeholder="0x…"
+              className="input"
+            />
+            <button
+              disabled={busy !== null || !newOwnerInput}
+              onClick={() => {
+                if (!confirm(`Transfer ownership to ${newOwnerInput}? This cannot be undone by you.`)) return;
+                runAction("set_owner", () => write("set_owner", [newOwnerInput]));
+              }}
+              className="px-4 py-2 bg-error-crimson text-white text-title-sm rounded-lg disabled:opacity-50 whitespace-nowrap"
+            >
+              {busy === "set_owner" ? "Transferring…" : "Transfer"}
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="bg-white border border-outline-variant rounded-xl overflow-hidden">

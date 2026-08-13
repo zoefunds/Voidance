@@ -31,6 +31,7 @@ export interface Policy {
   coverage_deposited: string;
   premium_deposited: string;
   milestone_deadline_ts: number;
+  accept_deadline_ts: number;
   claim_deadline_ts: number;
   verdict: string;
   total_score: number;

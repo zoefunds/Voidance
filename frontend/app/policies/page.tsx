@@ -1,16 +1,50 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import useSWR from "swr";
 import Link from "next/link";
 import { api } from "@/lib/api";
+import { readVoidance } from "@/lib/genlayerRead";
 import { StatusChip } from "@/components/StatusChip";
 
 function formatGen(wei: string) {
   return (Number(wei) / 1e18).toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
 
+const STATUS_OPTIONS = [
+  "CREATED",
+  "ACTIVE",
+  "CLAIM_SUBMITTED",
+  "EVALUATING",
+  "SETTLED_PASS",
+  "SETTLED_PARTIAL",
+  "SETTLED_FAIL",
+  "CANCELLED",
+  "EXPIRED_UNACCEPTED",
+  "EXPIRED_NO_CLAIM",
+];
+
 export default function PoliciesPage() {
-  const { data: policies, error, isLoading } = useSWR("policies", () => api.listPolicies(0, 20));
+  const { data: policies, error, isLoading } = useSWR("policies", () => api.listPolicies(0, 50));
+  const [statusFilter, setStatusFilter] = useState("");
+  const [fieldFilter, setFieldFilter] = useState("");
+
+  const { data: statusIds } = useSWR(
+    statusFilter ? `status-ids-${statusFilter}` : null,
+    () => readVoidance<number[]>("get_policy_ids_by_status", [statusFilter])
+  );
+  const { data: fieldIds } = useSWR(
+    fieldFilter.trim() ? `field-ids-${fieldFilter}` : null,
+    () => readVoidance<number[]>("get_policy_ids_by_field", [fieldFilter.trim()])
+  );
+
+  const filtered = useMemo(() => {
+    if (!policies) return policies;
+    let list = policies;
+    if (statusFilter && statusIds) list = list.filter((p) => statusIds.includes(p.id));
+    if (fieldFilter.trim() && fieldIds) list = list.filter((p) => fieldIds.includes(p.id));
+    return list;
+  }, [policies, statusFilter, statusIds, fieldFilter, fieldIds]);
 
   return (
     <div className="max-w-6xl mx-auto px-6 md:px-10 py-10">
@@ -26,6 +60,39 @@ export default function PoliciesPage() {
         </Link>
       </div>
 
+      <div className="flex flex-wrap gap-3 mb-6">
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="input w-auto"
+        >
+          <option value="">All statuses</option>
+          {STATUS_OPTIONS.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
+        <input
+          value={fieldFilter}
+          onChange={(e) => setFieldFilter(e.target.value)}
+          type="text"
+          placeholder="Filter by research field…"
+          className="input w-auto"
+        />
+        {(statusFilter || fieldFilter) && (
+          <button
+            onClick={() => {
+              setStatusFilter("");
+              setFieldFilter("");
+            }}
+            className="px-4 py-2 text-body-sm text-on-surface-variant hover:text-trust-blue"
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
+
       {isLoading && <p className="text-body-sm text-on-surface-variant">Loading policies…</p>}
       {error && (
         <p className="text-body-sm text-error-crimson">
@@ -34,7 +101,7 @@ export default function PoliciesPage() {
       )}
 
       <div className="grid md:grid-cols-2 gap-4">
-        {policies?.map((p) => (
+        {filtered?.map((p) => (
           <Link
             key={p.id}
             href={`/policies/${p.id}`}
@@ -54,8 +121,10 @@ export default function PoliciesPage() {
         ))}
       </div>
 
-      {!isLoading && !error && policies?.length === 0 && (
-        <p className="text-body-sm text-on-surface-variant">No policies yet — be the first to fund one.</p>
+      {!isLoading && !error && filtered?.length === 0 && (
+        <p className="text-body-sm text-on-surface-variant">
+          {statusFilter || fieldFilter ? "No policies match these filters." : "No policies yet — be the first to fund one."}
+        </p>
       )}
     </div>
   );

@@ -14,6 +14,18 @@ function formatGen(wei: string | number | bigint) {
   return (Number(wei) / 1e18).toLocaleString(undefined, { maximumFractionDigits: 4 });
 }
 
+interface UserStats {
+  address: string;
+  policies_sponsored: number;
+  policies_researched: number;
+  claims_filed: number;
+  claims_passed: number;
+  claims_partial: number;
+  claims_failed: number;
+  total_coverage_funded_wei: number;
+  total_payouts_received_wei: number;
+}
+
 export default function DashboardPage() {
   const { address, isConnected } = useAccount();
   const { write } = useVoidanceWallet();
@@ -22,10 +34,15 @@ export default function DashboardPage() {
     () => api.getWalletPolicies(address as string)
   );
   const { data: allPolicies } = useSWR("policies-for-dashboard", () => api.listPolicies(0, 50));
+  const { data: userStats } = useSWR(
+    address ? `user-stats-${address}` : null,
+    () => readVoidance<UserStats>("get_user_stats", [address as string])
+  );
 
   const [balance, setBalance] = useState<bigint | null>(null);
   const [withdrawing, setWithdrawing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [partialAmount, setPartialAmount] = useState("");
 
   async function refreshBalance() {
     if (!address) return;
@@ -47,6 +64,21 @@ export default function DashboardPage() {
     setWithdrawing(true);
     try {
       await write("withdraw_all", []);
+      await refreshBalance();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "withdraw failed");
+    } finally {
+      setWithdrawing(false);
+    }
+  }
+
+  async function handlePartialWithdraw() {
+    setError(null);
+    setWithdrawing(true);
+    try {
+      const amountWei = BigInt(Math.floor(Number(partialAmount) * 1e18));
+      await write("withdraw", [amountWei.toString()]);
+      setPartialAmount("");
       await refreshBalance();
     } catch (err) {
       setError(err instanceof Error ? err.message : "withdraw failed");
@@ -82,6 +114,18 @@ export default function DashboardPage() {
 
       {error && <p className="text-body-sm text-error-crimson mb-4">{error}</p>}
 
+      {userStats && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
+          <DashStat label="Sponsored" value={String(userStats.policies_sponsored)} />
+          <DashStat label="Researched" value={String(userStats.policies_researched)} />
+          <DashStat
+            label="Claims"
+            value={`${userStats.claims_passed + userStats.claims_partial} / ${userStats.claims_filed}`}
+          />
+          <DashStat label="Coverage Funded" value={`${formatGen(userStats.total_coverage_funded_wei)} GEN`} />
+        </div>
+      )}
+
       <div
         className={`rounded-xl p-5 ambient-card mb-10 flex items-center justify-between border ${
           hasBalance ? "bg-trust-blue text-white border-trust-blue" : "bg-white border-outline-variant"
@@ -108,13 +152,29 @@ export default function DashboardPage() {
           </div>
         </div>
         {hasBalance && (
-          <button
-            onClick={handleWithdraw}
-            disabled={withdrawing}
-            className="px-5 py-2.5 bg-research-teal text-trust-blue text-title-sm rounded-lg disabled:opacity-50 whitespace-nowrap"
-          >
-            {withdrawing ? "Confirming…" : "Withdraw to Wallet"}
-          </button>
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            <input
+              value={partialAmount}
+              onChange={(e) => setPartialAmount(e.target.value)}
+              type="number"
+              placeholder="Amount (GEN)"
+              className={`input w-32 ${hasBalance ? "bg-white/10 text-white placeholder:text-white/50 border-white/30" : ""}`}
+            />
+            <button
+              onClick={handlePartialWithdraw}
+              disabled={withdrawing || !partialAmount}
+              className="px-4 py-2.5 bg-white/15 text-white text-title-sm rounded-lg disabled:opacity-50 whitespace-nowrap"
+            >
+              {withdrawing ? "Confirming…" : "Withdraw Amount"}
+            </button>
+            <button
+              onClick={handleWithdraw}
+              disabled={withdrawing}
+              className="px-5 py-2.5 bg-research-teal text-trust-blue text-title-sm rounded-lg disabled:opacity-50 whitespace-nowrap"
+            >
+              {withdrawing ? "Confirming…" : "Withdraw All"}
+            </button>
+          </div>
         )}
       </div>
 
@@ -127,6 +187,15 @@ export default function DashboardPage() {
         <h2 className="text-title-sm text-trust-blue mb-3">Policies You Research</h2>
         <PolicyTable policies={researched} emptyLabel="You haven't accepted any policies yet." />
       </section>
+    </div>
+  );
+}
+
+function DashStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-innovation-slate border border-outline-variant rounded-lg p-3">
+      <div className="text-label-xs text-on-surface-variant uppercase">{label}</div>
+      <div className="text-title-sm text-trust-blue">{value}</div>
     </div>
   );
 }
