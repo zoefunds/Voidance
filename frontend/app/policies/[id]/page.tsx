@@ -75,25 +75,23 @@ export default function PolicyDetailPage({ params }: { params: { id: string } })
     }
   }
 
-  const nowTs = () => Math.floor(Date.now() / 1000);
-
   const acceptPolicy = () =>
-    runWrite(() => write("accept_policy", [policyId, nowTs()], requiredPremium));
+    runWrite(() => write("accept_policy", [policyId], requiredPremium));
 
   const evaluateClaim = () =>
-    runWrite(() => write("evaluate_claim", [policyId, nowTs()]));
+    runWrite(() => write("evaluate_claim", [policyId]));
 
   const withdrawClaim = () =>
-    runWrite(() => write("withdraw_claim", [policyId, nowTs()]));
+    runWrite(() => write("withdraw_claim", [policyId]));
 
   const cancelPolicy = () =>
-    runWrite(() => write("cancel_policy", [policyId, nowTs()]));
+    runWrite(() => write("cancel_policy", [policyId]));
 
   const claimSponsorTimeout = () =>
-    runWrite(() => write("claim_sponsor_timeout", [policyId, nowTs()]));
+    runWrite(() => write("claim_sponsor_timeout", [policyId]));
 
   const claimExpiredNoClaim = () =>
-    runWrite(() => write("claim_expired_no_claim", [policyId, nowTs()]));
+    runWrite(() => write("claim_expired_no_claim", [policyId]));
 
   const now = Date.now() / 1000;
   const acceptWindowExpired = policy.accept_deadline_ts && now > policy.accept_deadline_ts;

@@ -13,7 +13,9 @@ and open follow-ups — read it first before making architectural changes.
 
 - **App**: https://voidance-delta.vercel.app
 - **Backend API**: https://voidance-backend.fly.dev (`/health`, `/api/policies`, `/api/stats`, `/api/wallets/:address/policies`)
-- **Contract**: `0x58dED66906Ceb587236591C5d9729CE89501cbC2` on GenLayer StudioNet
+- **Contract**: `0x9a6bCe6a759c6E9ca20d90ca593B759CfC5E4f77` on GenLayer
+  StudioNet (**development/testnet deployment — not production-ready**; see
+  "StudioNet vs. production" below)
 - **Admin console**: https://voidance-delta.vercel.app/admin (owner/admin wallet only)
 
 ## Repository layout
@@ -69,6 +71,23 @@ backend/tests/   Backend API test suite
 Full step-by-step field values for testing this on real StudioNet with real
 GEN are in [`docs/TESTING.md`](docs/TESTING.md).
 
+### StudioNet vs. production
+
+The live deployment above runs on GenLayer **StudioNet**, which GenLayer's
+own docs describe as temporary, hosted *development* infrastructure — it is
+explicitly not a production network, and its state/history should not be
+relied on as permanent. Treat everything under "Live" as a working testnet
+deployment for evaluation and integration testing, not as a
+production-ready service, and do not point real user funds at it.
+
+Before trusting this contract with real funds at scale, it needs to be
+validated on GenLayer's persistent, production-grade network (referred to as
+**Bradbury** in current GenLayer docs — but confirm the current
+mainnet/persistent network name against
+[docs.genlayer.com](https://docs.genlayer.com) before deploying, since this
+has changed before and may change again). The StudioNet address and testing
+instructions above remain useful for functional testing in the meantime.
+
 ## Admin console
 
 At `/admin`, gated by an on-chain `is_admin(address)` check (owner or any
@@ -82,7 +101,7 @@ balance, and see every policy on the platform.
 
 ### Contract
 
-The contract (`contracts/innovation_failure_insurance.py`) is deployed
+The contract (`contracts/voidance.py`) is deployed
 manually via GenLayer Studio — see its module docstring for design notes.
 
 Run the contract test suite (in-memory execution against the real pinned
@@ -122,6 +141,20 @@ docker run -d --name voidance-pg-test -e POSTGRES_USER=voidance \
   -p 5442:5432 postgres:16-alpine
 npm test
 ```
+
+**Operational footgun, already hit once**: `SYNC_INTERVAL_MS` (default
+60000) controls how often the backend polls the GenLayer RPC for fresh
+policy data. The default public `GENLAYER_RPC_URL`
+(`https://studio.genlayer.com/api`) enforces a **shared, unauthenticated
+5,000 requests/day quota** — at the old 15-second default this alone burned
+5,760 requests/day before reading a single policy, and once the quota was
+exhausted every sync cycle failed silently until the next reset window (no
+crash, just `[]` from `/api/policies` and a `"Rate limit exceeded"` line in
+`fly logs`). If you scale the backend to more than one machine, be aware
+each machine runs its own independent sync loop against the same shared
+quota — this is not currently deduplicated across machines. Before
+production, get a dedicated RPC endpoint/API key from GenLayer instead of
+relying on the shared public one.
 
 ### Frontend
 
@@ -168,19 +201,68 @@ Get one free at https://cloud.walletconnect.com.
 
 ## What's been tested vs. what hasn't
 
-**Verified on real StudioNet with real GEN and two wallets**: full policy
-lifecycle through a `FAIL` verdict — create → accept → claim → evaluate →
-withdraw, including the sponsor receiving both the coverage refund and the
-researcher's forfeited bond.
+**Verified end-to-end on real StudioNet with real GEN, real consensus, and
+two dedicated test wallets** (development/testnet, not production — see
+"StudioNet vs. production" above). Every policy-lifecycle write function and
+every admin-tier write function has now actually been called on-chain and
+its result confirmed against the contract's own state, not just unit-tested
+in Direct Mode:
 
-**Not yet tested on-chain** (structurally verified — deployed, builds pass,
-unit tests pass — but nobody has run these specific paths for real):
-`PASS` and `PARTIAL` verdicts, `cancel_policy`, `claim_sponsor_timeout`,
-`claim_expired_no_claim`, `withdraw_claim`, the admin console's
-pause/unpause/fee-sweep actions, and the researcher-side Dashboard view.
-See the "What have we done so far and what do we have left" thread in
-session history, or just ask — this list gets shorter as more of the flow
-gets exercised for real.
+- **Policy lifecycle**: `create_policy`, `accept_policy`, `submit_claim`,
+  `withdraw_claim` (retract and leave the policy `ACTIVE` again),
+  `evaluate_claim` (both a `FAIL` verdict and a real low-confidence
+  inconclusive result that correctly stayed open instead of settling),
+  `cancel_policy` (pre-acceptance sponsor refund), `claim_sponsor_timeout`
+  (short accept window → `EXPIRED_UNACCEPTED`), `claim_expired_no_claim`
+  (short claim grace → `EXPIRED_NO_CLAIM`, funds split back to both
+  parties), `withdraw` (partial) and `withdraw_all` (full) — confirmed both
+  test wallets end at a `0` credited balance after withdrawing everything
+  they were owed.
+- **Admin tier**: `pause` / `unpause` (confirmed a paused contract correctly
+  rejects `create_policy`) — these are `_only_admin()`-gated and were run
+  successfully from an `add_admin`-granted wallet.
+- **Owner tier**: `set_protocol_fee_bps`, `set_min_premium_bps`,
+  `set_min_coverage_wei`, `set_default_windows`, `add_admin`,
+  `remove_admin`, and `sweep_protocol_fees` are all `_only_owner()`-gated —
+  stricter than admin. Calling them from an admin (non-owner) wallet was
+  confirmed to correctly and consistently fail authorization on real
+  consensus (both validators independently agreed the call is
+  unauthorized). This is a deliberate two-tier privilege design (admins can
+  pause; only the owner can change economic parameters or manage admins) —
+  see `_only_admin` vs. `_only_owner` in `contracts/voidance.py`. These
+  specific functions have not yet been exercised as a successful *owner*
+  call on real StudioNet — that requires the actual deployer wallet.
+
+Every real transaction across this run finalized deterministically (verdicts,
+statuses, and balances all matched expectations exactly); the only
+non-`SUCCESS` leader-execution results observed were (a) ordinary
+leader-rotation retries that still finalized correctly, and (b) the expected
+owner-only rejections above — neither ever produced incorrect on-chain state.
+
+**Still not exercised on-chain**: a `PASS`/`PARTIAL` verdict actually
+reaching settlement (the real LLM adjudication that ran came back either
+`FAIL` or inconclusive, both legitimate outcomes given the evidence used),
+the owner-only functions as an *authorized* call, `sweep_protocol_fees`
+actually sweeping a nonzero amount (none had accrued in this run — fees only
+accrue on `PASS`/`PARTIAL` researcher payouts), and the researcher-side
+Dashboard view and admin console UI (the contract calls behind them are
+verified; the UI itself wasn't clicked through this round).
+
+**Known test-suite limitation — multi-validator consensus is unproven.**
+The `tests/contract` suite runs entirely in `genlayer-test`'s Direct Mode,
+which executes the contract in-memory against a single mocked LLM response
+per call. It cannot simulate two independently-executing validators each
+running `gl.eq_principle.prompt_comparative` against their own (possibly
+differing) real LLM output and reaching consensus or disagreement — that
+mechanism is only exercisable against a real multi-validator network. So
+while `_score_to_verdict`'s band/bucket logic (the deterministic part the
+equivalence principle gates on) is unit-tested directly, the equivalence
+principle itself — whether real validators actually converge or correctly
+reject disagreement in practice — has **not** been validated end-to-end.
+Per [GenLayer's testing guidance](https://docs.genlayer.com/developers/intelligent-contracts/testing),
+this needs to be exercised on Studio Mode or a real testnet (StudioNet today,
+Bradbury before production) with multiple validators before this contract
+should be trusted with real funds at scale.
 
 ## License
 

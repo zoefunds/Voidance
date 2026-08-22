@@ -11,7 +11,11 @@ const EnvSchema = z.object({
   VOIDANCE_CONTRACT_ADDRESS: z
     .string()
     .regex(/^0x[a-fA-F0-9]{40}$/, "VOIDANCE_CONTRACT_ADDRESS must be a 20-byte hex address"),
-  SYNC_INTERVAL_MS: z.coerce.number().default(15000),
+  // 15s was too aggressive: at minimum 1 gen_call per cycle, that's 5760
+  // calls/day against studio.genlayer.com's 5000/day quota — the sync loop
+  // hits the rate limit before making a single successful read. 60s keeps
+  // this comfortably under quota even once evaluation-history reads add up.
+  SYNC_INTERVAL_MS: z.coerce.number().default(60000),
   CORS_ORIGINS: z
     .string()
     .default("http://localhost:3000")

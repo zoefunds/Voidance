@@ -11,7 +11,7 @@ import request from "supertest";
 
 process.env.DATABASE_URL ??= "postgres://voidance:voidance@localhost:5442/voidance_test";
 process.env.GENLAYER_RPC_URL ??= "http://127.0.0.1:1/unreachable";
-process.env.VOIDANCE_CONTRACT_ADDRESS ??= "0x58dED66906Ceb587236591C5d9729CE89501cbC2";
+process.env.VOIDANCE_CONTRACT_ADDRESS ??= "0x9a6bCe6a759c6E9ca20d90ca593B759CfC5E4f77";
 process.env.CORS_ORIGINS ??= "http://localhost:3000";
 
 const { pool } = await import("../src/db/pool.js");

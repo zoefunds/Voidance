@@ -130,20 +130,62 @@ export async function syncOnce(): Promise<void> {
 
 let syncing = false;
 
+// The Fly app runs multiple machines for API availability, but the GenLayer
+// RPC quota (studio.genlayer.com's shared 5000 requests/day) is a single
+// global budget — every machine independently running its own setInterval
+// multiplies RPC consumption by the machine count for the exact same global
+// chain state, with no benefit (all machines share one Postgres, so any one
+// of them syncing keeps every machine's reads fresh).
+//
+// A plain mutual-exclusion lock (e.g. pg_try_advisory_lock) is NOT enough
+// here: a sync cycle finishes (successfully or by failing fast on a rate
+// limit) in well under a second, so the lock is released almost
+// immediately, and each machine's own independently-scheduled tick just
+// re-acquires it on its own next tick anyway — total daily RPC volume stays
+// exactly the same as running unlocked, just without simultaneous overlap.
+// What actually needs bounding is CADENCE, not concurrency: no machine may
+// attempt a cycle within `intervalMs` of the last attempt made by ANY
+// machine. This is enforced by an atomic conditional UPDATE against a
+// shared `sync_state` row — only a machine whose UPDATE actually matches a
+// row (i.e. the row was stale by at least intervalMs) is allowed to proceed.
+const SYNC_GATE_KEY = "sync_gate";
+
+async function claimSyncTurn(intervalMs: number): Promise<boolean> {
+  const { rowCount } = await pool.query(
+    `INSERT INTO sync_state (key, value, updated_at)
+     VALUES ($1, 'claimed', now())
+     ON CONFLICT (key) DO UPDATE SET value = 'claimed', updated_at = now()
+     WHERE sync_state.updated_at <= now() - ($2 || ' milliseconds')::interval`,
+    [SYNC_GATE_KEY, intervalMs]
+  );
+  return (rowCount ?? 0) > 0;
+}
+
 export function startSyncLoop(intervalMs: number): NodeJS.Timeout {
   const tick = async () => {
-    if (syncing) return; // never overlap sync cycles
+    if (syncing) return; // never overlap sync cycles on this machine
     syncing = true;
     try {
+      const claimed = await claimSyncTurn(intervalMs);
+      if (!claimed) {
+        // Some machine (possibly this one, possibly another) already
+        // synced within the last intervalMs — skip, zero RPC calls.
+        return;
+      }
       await syncOnce();
     } catch (err) {
       // A failed sync cycle must never crash the always-on process — log
-      // and retry on the next tick.
+      // and retry once the gate opens again.
       logger.error({ err }, "sync cycle failed");
     } finally {
       syncing = false;
     }
   };
   void tick();
-  return setInterval(tick, intervalMs);
+  // Each machine still ticks on its own local timer, but ticks faster than
+  // intervalMs (a fraction of it) so that whichever machine's clock lines
+  // up first after the gate opens claims the turn promptly rather than
+  // leaving a long dead gap — claimSyncTurn's DB-side check is what
+  // actually enforces the real cadence, not this local timer.
+  return setInterval(tick, Math.max(5000, Math.floor(intervalMs / 4)));
 }

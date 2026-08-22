@@ -26,7 +26,7 @@ export default function SubmitClaimPage({ params }: { params: { id: string } }) 
     setError(null);
     setIsPending(true);
     try {
-      await write("submit_claim", [policyId, narrative, JSON.stringify(urls), Math.floor(Date.now() / 1000)]);
+      await write("submit_claim", [policyId, narrative, JSON.stringify(urls)]);
       router.push(`/policies/${policyId}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "transaction failed");

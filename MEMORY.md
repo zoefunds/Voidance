@@ -6,7 +6,7 @@ new session before making architectural or process decisions.
 **Brand name: "Voidance"** (chosen 2026-07-27 over Failsafe/Riskproof/Nullwin
 — a "void" research result still counts). Repo/folder/git remote stay named
 `Innovation-Failure` (already created before renaming); the contract class
-is `Voidance` (`contracts/innovation_failure_insurance.py`). Use "Voidance"
+is `Voidance` (`contracts/voidance.py`). Use "Voidance"
 as the product name everywhere user-facing: logo wordmark, page titles,
 nav bar, README title, favicon alt text.
 
@@ -48,7 +48,7 @@ submit-claim, claim-evaluation, user-dashboard). These are prototypes to
 understand and reinterpret per section, not to copy-paste. Palette anchor:
 Trust Blue `#0A2540`, Research Teal `#00D4FF`, Innovation Slate `#F6F9FC`.
 
-## Contract design (contracts/innovation_failure_insurance.py)
+## Contract design (contracts/voidance.py)
 
 ~1,630 lines. Built from two working reference contracts the user provided
 for escrow/value-transfer and web/image evaluation patterns:
@@ -87,7 +87,7 @@ Key properties, per the review team's rejection criteria:
   storage patterns.
 - `genvm-lint` was not installed locally (pip environment is externally
   managed on this Mac) — only `ast.parse` syntax validation was run. Run
-  `genvm-lint check contracts/innovation_failure_insurance.py --json` before
+  `genvm-lint check contracts/voidance.py --json` before
   deploying if the tool becomes available, per the user's reference brief.
 
 ## Redis — added, then removed by explicit request (2026-07-27)
@@ -114,7 +114,7 @@ Renamed to https://github.com/zoefunds/Voidance.git (was Innovation-Failure).
 
 ## Deployed contract
 
-- **Voidance contract address (GenLayer StudioNet)**: `0x58dED66906Ceb587236591C5d9729CE89501cbC2`
+- **Voidance contract address (GenLayer StudioNet)**: `0x9a6bCe6a759c6E9ca20d90ca593B759CfC5E4f77`
   (deployed by the user via GenLayer Studio, constructor args:
   min_coverage_wei=0, min_premium_bps=300, protocol_fee_bps=150,
   owner_address=blank → owner is the deploying wallet).
@@ -181,7 +181,7 @@ writing code:
   **Ran the compiled server against a throwaway local Postgres container**
   (migration applied cleanly) and hit `/health`, `/api/policies`,
   `/api/stats` — `/api/stats` successfully read `get_platform_stats` live
-  from the real deployed contract at `0x58dED66906Ceb587236591C5d9729CE89501cbC2`
+  from the real deployed contract at `0x9a6bCe6a759c6E9ca20d90ca593B759CfC5E4f77`
   on StudioNet via `genlayer-js`, confirming the read path is real and
   working, not just type-checked.
 - **Frontend**: `npm install` ✅, `tsc --noEmit` ✅ (fixed real type errors:
@@ -284,3 +284,109 @@ later, use the Next 14 plain-object params pattern, not Next 15's.**
       remains the source of truth for money movement.
 - [ ] fly.toml with `min_machines_running = 1`+ auto-restart for 24/7 backend.
 - [ ] Do not add Claude as commit co-author on this repo.
+
+## Contract rename + multi-round audit fixes, redeployed to
+`0x9a6bCe6a759c6E9ca20d90ca593B759CfC5E4f77` (2026-08-22)
+
+`contracts/innovation_failure_insurance.py` renamed to
+`contracts/voidance.py` (`Voidance` class), all references updated
+repo-wide. The contract went through three external audit passes this
+session, each catching real issues, each fixed and verified with a growing
+`tests/contract/test_voidance.py` suite (15 → 27 tests, all passing):
+
+**Round 1 fixes**: caller-controlled `now_ts` replaced with GenVM's
+deterministic `datetime.now(timezone.utc)` (`_now_ts()` helper, computed
+inside every entrypoint, never accepted as a parameter); consensus
+equivalence now requires exact `verdict_class` (settlement band) agreement,
+not just score proximity; evidence prompts now label domain provenance via
+`_url_domain` and explicitly frame fetched content as untrusted/injection-
+resistant; added `MAX_EVALUATION_ATTEMPTS` cap so a stuck low-confidence
+claim can't be re-evaluated forever; StudioNet framing corrected in docs.
+
+**Round 2 fixes** (a second audit pass on round 1): `PARTIAL`-band
+`payout_bps` is now quantized into `PAYOUT_BUCKET_BPS=500` steps with
+`PAYOUT_BPS_TOLERANCE=0` (exact match required) — closes a residual 20%-
+of-coverage payout-tolerance gap the first fix left open. The
+`MAX_EVALUATION_ATTEMPTS` cap no longer force-settles to `FAIL` (that let a
+hostile party spam re-runs during infra flakiness to collect a sponsor
+windfall) — it now settles to a new neutral `STATUS_UNRESOLVED` and splits
+funds back to their original owners, same pattern as
+`claim_expired_no_claim`. Added `approved_evidence_domains_json`
+(sponsor-optional allowlist on `create_policy`) so evidence provenance is
+contract-enforced, not just prompt-level — `submit_claim` now rejects
+out-of-allowlist URLs outright. Fixed a stale/vacuously-passing test that
+still called `create_policy` with the removed `now_ts` arg (only "passed"
+because it was wrapped in a too-broad `expect_revert()`).
+
+**Round 3**: frontend gained a real "Approved evidence domains" input on
+the create-policy form (previously always sent `"[]"`, silently disabling
+the new allowlist from the UI's perspective).
+
+Each redeploy required: new constructor deploy in GenLayer Studio → update
+`frontend/lib/contract.ts` + both `.env.example` files + `README.md` +
+`MEMORY.md` + `docs/TESTING.md` → `fly secrets set
+VOIDANCE_CONTRACT_ADDRESS=...` on `voidance-backend` → `vercel env`
+update + `vercel --prod` on the `voidance` project → **truncate the
+backend's Postgres cache** (`policies`/`evaluations`/`activity_log`/
+`wallets`, reset `sync_state`), since the cache has no contract-address
+column and a fresh contract restarts `policy_id` at 0, colliding with
+stale cached rows from the old contract. Claude cannot run the DB
+`TRUNCATE` itself — it's a destructive action on live shared infra and gets
+blocked by the auto-mode safety classifier even with explicit user
+permission; the user ran it via `fly postgres connect -a voidance-db -d
+voidance_backend` each time.
+
+**Vercel project mixup**: the first `vercel link --yes` (run from
+`frontend/` with no existing `.vercel/project.json` and no `--project`
+flag) created a brand-new project named `frontend` instead of linking the
+existing `voidance` project, deploying to the wrong URL
+(`frontend-*.vercel.app`) once. Fixed by `rm -rf .vercel && vercel link
+--yes --project voidance`, and the stray `frontend` project was deleted
+(`vercel remove frontend --yes`). Always pass `--project voidance`
+explicitly, or verify `.vercel/project.json` names `voidance` before
+deploying.
+
+**Backend sync-loop rate-limit bug**: `SYNC_INTERVAL_MS` defaulted to
+15000 — one `gen_call` per cycle minimum is 5,760 requests/day, already
+over the shared public `studio.genlayer.com/api` endpoint's 5,000/day quota
+before reading a single policy. Once exhausted, every sync cycle failed
+silently (`/api/policies` stuck at `[]`, no crash) until the quota reset.
+Fixed by raising the default to 60000ms in both `backend/src/config/env.ts`
+and `backend/.env.example`, and via `fly secrets set SYNC_INTERVAL_MS=60000
+-a voidance-backend`. Also discovered the backend runs 2 Fly machines, each
+independently running its own sync loop against the same shared quota —
+not deduplicated; worth a Postgres advisory-lock guard if this becomes a
+recurring problem. This is purely a quota/caching issue, never a chain
+problem — direct on-chain reads (bypassing the backend cache) always
+confirmed policies were correctly created even while the cache was stuck.
+
+**Full on-chain function test (2026-08-22)**: at the user's request, ran
+every public write function against the live `0x9a6b...` contract using
+two freshly-generated, user-funded test wallets (Claude generated the
+keypairs itself and used `genlayer-js`'s `createAccount(privateKey)` to
+sign directly — **Claude will not accept or handle the user's own existing
+private keys**, generating fresh throwaway ones for scripted testnet
+automation was the agreed middle ground). Exercised: `create_policy` ×6
+(PASS-leaning, FAIL-leaning, withdraw_claim, cancel, sponsor-timeout,
+claim-expired paths), `accept_policy`, `submit_claim`, `withdraw_claim`,
+`evaluate_claim` (produced one real `FAIL` verdict and one real
+low-confidence-inconclusive result — no `PASS`/`PARTIAL` reached this
+round, both outcomes were legitimate given the evidence used, not a bug),
+`cancel_policy`, `claim_sponsor_timeout`, `claim_expired_no_claim`,
+`withdraw`, `withdraw_all`, `pause`/`unpause` (admin-tier, succeeded).
+Discovered mid-run that `set_protocol_fee_bps`, `set_min_premium_bps`,
+`set_min_coverage_wei`, `set_default_windows`, `add_admin`, `remove_admin`,
+and `sweep_protocol_fees` are all `_only_owner()`-gated, not just
+admin-gated — the test wallet (admin via `add_admin`) correctly and
+consistently failed all seven, confirmed via `leader_execution_results:
+["ERROR","ERROR"]` (both validators agreeing on the rejection) rather than
+a client-side throw. This is the contract behaving correctly, not a bug —
+GenLayer transactions that error still *finalize* deterministically rather
+than rejecting the signing client's promise, which tripped up the test
+script's own "expect revert" check (a cosmetic false-negative in the test
+script, not the contract). To exercise those 7 functions for real, someone
+needs to run them from the actual owner wallet (`0x7401c129...058Eb`).
+Both test wallets ended the run fully withdrawn to `0`; contract config
+(`protocol_fee_bps`, `min_premium_bps`, etc.) confirmed unchanged at
+defaults via `get_config()` since none of the owner-only calls ever
+actually applied.

@@ -4,7 +4,7 @@ This walks through the full escrow lifecycle with **real GEN and two
 wallets** against the live deployed contract:
 
 ```
-0x58dED66906Ceb587236591C5d9729CE89501cbC2
+0x9a6bCe6a759c6E9ca20d90ca593B759CfC5E4f77
 ```
 
 You need **two funded StudioNet accounts** — one plays the sponsor, one
@@ -51,10 +51,10 @@ Call as the **sponsor** account. Attach value = the coverage amount.
 | `milestone_description` | `Demonstrate at least 50x improvement in coherence time over the unshielded baseline.` |
 | `tags_json` | `["quantum","hardware"]` |
 | `milestone_deadline_ts` | a unix timestamp ~1 hour from now — e.g. run `date -v+1H +%s` (macOS) or `date -d '+1 hour' +%s` (Linux) |
-| `now_ts` | current unix timestamp — `date +%s` |
 | `premium_bps` | `300` (3%) |
 | `accept_window_seconds` | `0` (use platform default, 30 days) |
 | `claim_grace_seconds` | `0` (use platform default, 60 days) |
+| `approved_evidence_domains_json` | `[]` (no restriction — evidence can come from any domain; set e.g. `["arxiv.org"]` to require the researcher's evidence URLs resolve to that domain, or the claim is rejected outright) |
 | **value attached** | `1000000000000000000` (1 GEN, in wei) — use less if you want a smaller test, just keep it a round number so the math is easy to eyeball |
 
 **Note on `methodology_url`**: it must be a real, publicly fetchable URL —
@@ -75,7 +75,6 @@ contract rejects any mismatch.
 | Field | Value |
 |---|---|
 | `policy_id` | the id from step 1 |
-| `now_ts` | current unix timestamp |
 | **value attached** | exactly the result of `quote_required_premium` |
 
 Check `get_policy(policy_id)` afterward — `status` should now be `ACTIVE`
@@ -90,7 +89,6 @@ Still the **researcher** account, no value attached.
 | `policy_id` | the id from step 1 |
 | `claim_narrative` | `Despite following the pre-registered shielding protocol exactly, coherence time only improved 12x, short of the 50x target. Environmental vibration noise in the lab exceeded the isolation budget in the original design.` |
 | `evidence_urls_json` | `["https://raw.githubusercontent.com/genlayerlabs/genvm/main/README.md","https://en.wikipedia.org/wiki/Quantum_decoherence"]` |
-| `now_ts` | current unix timestamp |
 
 Both evidence URLs above are real, publicly reachable pages — good for a
 first test since you're checking that the plumbing works, not tuning for a
@@ -105,7 +103,6 @@ attached.
 | Field | Value |
 |---|---|
 | `policy_id` | the id from step 1 |
-| `now_ts` | current unix timestamp |
 
 **This is the slow step**: GenLayer validators actually fetch both URLs and
 run an LLM adjudication pass under `gl.eq_principle.prompt_comparative` —

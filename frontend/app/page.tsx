@@ -1,5 +1,10 @@
 import Link from "next/link";
 import { ShieldIcon, FlaskIcon, LockIcon, GearIcon, CheckIcon, ArrowRightIcon } from "@/components/Icons";
+import { VOIDANCE_ADDRESS } from "@/lib/contract";
+
+function truncateAddress(address: string): string {
+  return `${address.slice(0, 8)}...${address.slice(-6)}`;
+}
 
 export default function LandingPage() {
   return (
@@ -166,7 +171,7 @@ export default function LandingPage() {
                   <span className="text-[10px] text-success-green font-bold">LOCKED</span>
                 </div>
                 <div className="text-code-xs text-trust-blue break-all opacity-70">
-                  0x58dED6...01cbC2
+                  {truncateAddress(VOIDANCE_ADDRESS)}
                 </div>
               </div>
             </div>

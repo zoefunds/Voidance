@@ -21,6 +21,7 @@ export default function NewPolicyPage() {
     coverage: "",
     premiumBps: "300",
     deadline: "",
+    approvedEvidenceDomains: "",
   });
 
   function set<K extends keyof typeof form>(key: K, value: string) {
@@ -29,8 +30,11 @@ export default function NewPolicyPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const nowTs = Math.floor(Date.now() / 1000);
     const deadlineTs = Math.floor(new Date(form.deadline).getTime() / 1000);
+    const approvedDomains = form.approvedEvidenceDomains
+      .split(",")
+      .map((d) => d.trim().toLowerCase())
+      .filter(Boolean);
     setError(null);
     setIsPending(true);
     try {
@@ -45,10 +49,10 @@ export default function NewPolicyPage() {
           form.milestone,
           "[]",
           deadlineTs,
-          nowTs,
           Number(form.premiumBps),
           0,
           0,
+          JSON.stringify(approvedDomains),
         ],
         parseEther(form.coverage || "0")
       );
@@ -80,7 +84,7 @@ export default function NewPolicyPage() {
             <input required value={form.field} onChange={(e) => set("field", e.target.value)} className="input" placeholder="e.g. Materials Science" />
           </Field>
           <Field label="Milestone deadline">
-            <input required type="date" value={form.deadline} onChange={(e) => set("deadline", e.target.value)} className="input" />
+            <input required type="datetime-local" value={form.deadline} onChange={(e) => set("deadline", e.target.value)} className="input" />
           </Field>
         </div>
         <Field label="Public methodology document URL">
@@ -91,6 +95,18 @@ export default function NewPolicyPage() {
         </Field>
         <Field label="Insured milestone">
           <textarea required rows={2} value={form.milestone} onChange={(e) => set("milestone", e.target.value)} className="input" />
+        </Field>
+        <Field label="Approved evidence domains (optional)">
+          <input
+            value={form.approvedEvidenceDomains}
+            onChange={(e) => set("approvedEvidenceDomains", e.target.value)}
+            className="input"
+            placeholder="e.g. arxiv.org, github.com — comma-separated"
+          />
+          <span className="text-label-xs text-on-surface-variant mt-1">
+            If set, the researcher's claim evidence URLs must resolve to one of these domains, or the
+            claim is rejected outright. Leave blank to accept evidence from any domain (default).
+          </span>
         </Field>
         <div className="grid grid-cols-2 gap-4">
           <Field label="Coverage (GEN)">
